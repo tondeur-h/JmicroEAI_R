@@ -3,6 +3,7 @@ package jmicroeai_r;
 import java.io.BufferedInputStream;
 import java.io.BufferedWriter;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -10,6 +11,7 @@ import java.net.Inet4Address;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -21,24 +23,48 @@ public class JmicroEAI_R {
 
     ServerSocket ss;
     Socket sock;
+    int port=4200;
+    String host="127.0.0.1";
+    boolean mllp=false;
+    String pathDest=".";
+    long compteur=0;
     
     //constructor
-    JmicroEAI_R(){
-        server("127.0.0.1", 4200);
+    JmicroEAI_R(String argv){
+        if (argv.compareToIgnoreCase("vide")!=0){read_properties(argv);}
+        server(host, port);
         loop_socket();
+    }
+    
+    public void read_properties(String fichier){
+        try {
+            Properties p=new Properties();
+            p.load(new FileReader(fichier));
+            
+            host=p.getProperty("host", "127.0.0.1");
+            port=Integer.parseInt(p.getProperty("port", "4200"),10);
+            mllp=Boolean.parseBoolean(p.getProperty("port", "false"));
+            pathDest=p.getProperty("path", "./");
+            compteur=Integer.parseInt(p.getProperty("counter", "0"),10);
+            
+        } catch (Exception ex) {
+            Logger.getLogger(JmicroEAI_R.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
     
     /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        new JmicroEAI_R();
+        String pathopt="vide";
+        if (args.length>0) pathopt=args[1];
+        new JmicroEAI_R(pathopt);
     }
     
     public boolean server(String host, int port){
         try {
             ss=new ServerSocket(port, 1000,Inet4Address.getByName(host));
-            System.out.println("Connection Socket ok...");
+            System.out.println("Connection Socket ok sur "+ host+":"+port);
         } catch (Exception ex) {
             Logger.getLogger(JmicroEAI_R.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -51,11 +77,9 @@ public class JmicroEAI_R {
     public void loop_socket(){
         try {
         while (true){
-            
                 sock=ss.accept();
-                hl7Writer hl7=new hl7Writer(sock);
-                hl7.start();
-                
+                hl7Writer hl7=new hl7Writer(sock,pathDest,compteur,mllp);
+                hl7.start();        
         }
         
             } catch (IOException ex) {
@@ -71,14 +95,14 @@ Socket localsock;
     BufferedWriter pw;
     BufferedInputStream bis;
     byte []buffer;
-    static long compteur;
+    static long comptr;
 
-    public hl7Writer(Socket sock) {
+    public hl7Writer(Socket sock,String path,long compteur, boolean mllp) {
     try {
-        compteur++;
+        comptr++;
         localsock=sock;
-        pw=new BufferedWriter(new FileWriter(compteur+".hl7"));
-        System.out.println("Creation du fichier "+compteur+".hl7");
+        pw=new BufferedWriter(new FileWriter(comptr+".hl7"));
+        System.out.println(comptr+"-Creation du fichier "+path+"/"+comptr+".hl7");
         bis=new BufferedInputStream(localsock.getInputStream());
         buffer=new byte[5428880];
         
@@ -93,11 +117,11 @@ Socket localsock;
     public void run() {
         try{
         long nboctet=bis.read(buffer);
-            System.out.println("Lecture de "+nboctet+" octets...");
+            System.out.println(comptr+"-Lecture de "+nboctet+" octets...");
         for (int i=0;i<nboctet;i++){pw.write(buffer[i]);}
         pw.flush();
         pw.close();
-            System.out.println("Cloture...");
+            System.out.println(comptr+"-Cloture...");
         }
         catch(Exception e){}
     }
