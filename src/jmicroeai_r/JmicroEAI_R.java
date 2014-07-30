@@ -174,7 +174,7 @@ class hl7Writer extends Thread{
             iseg++;
         }
         
-        MSA=MSH+"\nMSA|AA|"+ArraySegment[9];
+        MSA=MSH+"\rMSA|AA|"+ArraySegment[9];
         bufferACK=MSA.getBytes();
         System.out.println(MSA);
     }
@@ -208,7 +208,7 @@ class hl7Writer extends Thread{
         pw.close();
         if (lACK){
             prepare_ACK();
-            bos.write(bufferACK);
+            bos.write(bufferACK, 0, MSA.length()-1);
             System.out.println(compteur+" - send ACK");
         }
         System.out.println(compteur+" - close");
