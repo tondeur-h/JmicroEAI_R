@@ -28,6 +28,7 @@ public class JmicroEAI_R {
     String pathDest="."; //path de destination des fichiers
     String ext="hl7"; //extension des fichiers
     String pref=""; //prefixe des nom de fichiers
+    int sl=0x0d;
     String host="127.0.0.1"; //host du pc nom ou ip
     int port=4200; //port d'ecoute de la socket
     boolean MLLP=false; //decode l'encapsulation MMLP
@@ -40,18 +41,19 @@ public class JmicroEAI_R {
     */
     public void read_properties(){
     try{
-        String fich_prop="jmicroeai.properties";
+        String fich_prop="JmicroEAI.properties";
         Properties p=new Properties();
         p.load(new FileReader(fich_prop));
         pathDest=p.getProperty("path", ".");
         ext=p.getProperty("ext", "hl7");
         pref=p.getProperty("pref", "");
+        sl=Integer.parseInt(p.getProperty("sep", "13"), 10);
         host=p.getProperty("host", "127.0.0.1");
         port=Integer.parseInt(p.getProperty("port", "4200"), 10);
         MLLP=Boolean.parseBoolean(p.getProperty("mllp", "false"));
         ACK=Boolean.parseBoolean(p.getProperty("ack", "false"));
         bufferMAX=Integer.parseInt(p.getProperty("buffer", "5242880"), 10);
-    }catch(Exception e){/*muet utiliser les valeurs par défaut*/}
+    }catch(Exception e){e.printStackTrace();/*muet utiliser les valeurs par défaut*/}
     }
     
     
@@ -95,6 +97,7 @@ public class JmicroEAI_R {
             System.out.println("path: "+pathDest);
             System.out.println("extension: "+ext);
             System.out.println("prefixe: "+pref);
+            System.out.println("cr/lf: "+sl);
             System.out.println("MLLP: "+MLLP);
             System.out.println("ACK: "+ACK);
             System.out.println("buffer size: "+bufferMAX);
@@ -116,7 +119,7 @@ public class JmicroEAI_R {
                 //attente clients
                 sock=ss.accept();
                 //run thread pour chaque client
-                hl7Writer hl7=new hl7Writer(sock,pathDest,ext,pref,ACK,MLLP,bufferMAX);
+                hl7Writer hl7=new hl7Writer(sock,pathDest,ext,pref,sl,ACK,MLLP,bufferMAX);
                 hl7.start();
                 
         }
@@ -149,30 +152,35 @@ class hl7Writer extends Thread{
     byte[]bufferACK;
     
     static long compteur; //compteur de classe
+    long cname;
     
     //variable locale à la classe
     boolean lACK,lMLLP;
     int bufferMAX;
     long bufferSize=0;
     String MSA;
+    String sep="|";
+    int sautligne;
     
     //tableau des segment MSH
     String [] ArrayMSH;
     
-    public hl7Writer(Socket sock,String path, String ext, String suff, boolean ACK, boolean MLLP,int bfMAX) {
+    public hl7Writer(Socket sock,String path, String ext, String suff,int sl, boolean ACK, boolean MLLP,int bfMAX) {
     try {
         compteur++;
+        cname=compteur;
         localsock=sock;
         lACK=ACK;
         lMLLP=MLLP;
         bufferMAX=bfMAX;
+        sautligne=sl;
         
 //recuperer les port et adresse du client pour envoyer l'ack vers ce port.
         portclient=localsock.getPort(); 
         adrclient=localsock.getInetAddress().getHostAddress();
         
-        pw=new BufferedWriter(new FileWriter(path+"/"+suff+compteur+"."+ext));
-        System.out.println(compteur+" - create file "+path+"/"+suff+compteur+"."+ext);
+        pw=new BufferedWriter(new FileWriter(path+"/"+suff+cname+"."+ext));
+        System.out.println(cname+" - create file "+path+"/"+suff+cname+"."+ext);
         //preparer les flux in/out
         bis=new BufferedInputStream(localsock.getInputStream());
         bos=new BufferedOutputStream(localsock.getOutputStream());
@@ -188,13 +196,13 @@ class hl7Writer extends Thread{
     }
     
     
-    synchronized public void prepare_ACK(){
+    public void prepare_ACK(){
         //chercher la ligne MSH
     int i=0;
-    while ((i<bufferSize) && (buffer[i]!=0x0d)){i++;}
+    while ((i<bufferSize) && (buffer[i]!=sautligne)){i++;}
     //convertir buffer en string
     String MSH=new String (buffer, 0, i);
-    //    System.out.println(MSH);
+        System.out.println(MSH);
         
        //decouper les segments
      
@@ -204,12 +212,14 @@ class hl7Writer extends Thread{
         int iseg=0;
         while (sc.hasNext()){
             ArrayMSH[iseg]=sc.next();
+        //    System.out.println(ArrayMSH[iseg]);
             iseg++;
         }
         
-        MSA=MSH+"\rMSA|AA|"+ArrayMSH[9];
+        MSA=ArrayMSH[0]+sep+ArrayMSH[1]+"|HT|CHV|"+ArrayMSH[2]+sep+ArrayMSH[3]+sep+ArrayMSH[6]+sep+ArrayMSH[7]+sep+ArrayMSH[8]+sep+ArrayMSH[9]+sep+ArrayMSH[10]+sep+ArrayMSH[11]+sep+ArrayMSH[12]+sep+ArrayMSH[13]+sep+ArrayMSH[14]+sep+ArrayMSH[15]+sep+ArrayMSH[16]+sep+ArrayMSH[17]+sep+sautligne+"MSA|AA|"+ArrayMSH[9];
+      
         bufferACK=MSA.getBytes();
-        System.out.println(MSA);
+      //  System.out.println(MSA);
     }
 
     
@@ -235,11 +245,11 @@ class hl7Writer extends Thread{
         try{
             //lire le message dans la socket
         bufferSize=bis.read(buffer);
-         System.out.println(compteur+" - read "+bufferSize+" bytes");
+         System.out.println(cname+" - read "+bufferSize+" bytes");
          
         //retirer les caracteres d'encapsulation MLLP
         if (lMLLP){convert_mllp();
-            System.out.println(compteur+" - extract MLLP "+bufferSize+" bytes");
+            System.out.println(cname+" - extract MLLP "+bufferSize+" bytes");
         }
    
         //ecrire le fichier message sur disque
@@ -251,12 +261,12 @@ class hl7Writer extends Thread{
         if (lACK){
             prepare_ACK();
             bos.write(bufferACK, 0, MSA.length()-1);
-            System.out.println(compteur+" - send ACK");
+            System.out.println(cname+" - send ACK");
         }
         
         //fin processus
-        System.out.println(compteur+" - close");
+        System.out.println(cname+" - close");
         }
-        catch(Exception e){}
+        catch(Exception e){e.printStackTrace();}
     }
 }
