@@ -1,19 +1,17 @@
 package jmicroeai_r;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedWriter;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.net.Inet4Address;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.Properties;
 import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.logging.Logger;;
 
 /**
  *
@@ -23,48 +21,66 @@ public class JmicroEAI_R {
 
     ServerSocket ss;
     Socket sock;
-    int port=4200;
-    String host="127.0.0.1";
-    boolean mllp=false;
+    
     String pathDest=".";
-    long compteur=0;
+    String ext="hl7";
+    String host="127.0.0.1";
+    int port=4200;
+    boolean MLLP=false;
+    boolean ACK=false;
+    int bufferMAX=5242880;
+    
+    
+    public void read_properties(String fich_prop){
+    try{
+        Properties p=new Properties();
+        p.load(new FileReader(fich_prop));
+        pathDest=p.getProperty("path", ".");
+        ext=p.getProperty("ext", "hl7");
+        host=p.getProperty("host", "127.0.0.1");
+        port=Integer.parseInt(p.getProperty("port", "4200"), 10);
+        MLLP=Boolean.parseBoolean(p.getProperty("mllp", "false"));
+        ACK=Boolean.parseBoolean(p.getProperty("ack", "false"));
+        bufferMAX=Integer.parseInt(p.getProperty("buffer", "5242880"), 10);
+    }catch(Exception e){}
+    
+    }
+    
     
     //constructor
     JmicroEAI_R(String argv){
-        if (argv.compareToIgnoreCase("vide")!=0){read_properties(argv);}
+        //lire properties si definie sur ligne de cmd...
+        if (argv.compareTo("vide")!=0){read_properties(argv);}
+        //init socket
         server(host, port);
+        //ecoute socket
         loop_socket();
-    }
-    
-    public void read_properties(String fichier){
-        try {
-            Properties p=new Properties();
-            p.load(new FileReader(fichier));
-            
-            host=p.getProperty("host", "127.0.0.1");
-            port=Integer.parseInt(p.getProperty("port", "4200"),10);
-            mllp=Boolean.parseBoolean(p.getProperty("port", "false"));
-            pathDest=p.getProperty("path", "./");
-            compteur=Integer.parseInt(p.getProperty("counter", "0"),10);
-            
-        } catch (Exception ex) {
-            Logger.getLogger(JmicroEAI_R.class.getName()).log(Level.SEVERE, null, ex);
-        }
     }
     
     /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        String pathopt="vide";
-        if (args.length>0) pathopt=args[1];
-        new JmicroEAI_R(pathopt);
+        String optArg="vide";
+    if (args.length>0){optArg=args[0];}
+    //appeler constructeur pour s'affranchir du mode static
+        new JmicroEAI_R(optArg);
     }
     
+    
+    /*!
+    * 
+    */
     public boolean server(String host, int port){
         try {
             ss=new ServerSocket(port, 1000,Inet4Address.getByName(host));
-            System.out.println("Connection Socket ok sur "+ host+":"+port);
+            System.out.println("Connection Socket on "+host+":"+port);
+            System.out.println("path: "+pathDest);
+            System.out.println("extension: "+ext);
+            System.out.println("MLLP: "+MLLP);
+            System.out.println("ACK: "+ACK);
+            System.out.println("buffer size: "+bufferMAX);
+            System.out.println("Ready...");
         } catch (Exception ex) {
             Logger.getLogger(JmicroEAI_R.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -77,9 +93,11 @@ public class JmicroEAI_R {
     public void loop_socket(){
         try {
         while (true){
+            
                 sock=ss.accept();
-                hl7Writer hl7=new hl7Writer(sock,pathDest,compteur,mllp);
-                hl7.start();        
+                hl7Writer hl7=new hl7Writer(sock,pathDest,ext,ACK,MLLP,bufferMAX);
+                hl7.start();
+                
         }
         
             } catch (IOException ex) {
@@ -91,37 +109,64 @@ public class JmicroEAI_R {
 
 
 class hl7Writer extends Thread{
-Socket localsock;
+    Socket localsock;
     BufferedWriter pw;
     BufferedInputStream bis;
+    BufferedOutputStream bos;
+    
     byte []buffer;
-    static long comptr;
-
-    public hl7Writer(Socket sock,String path,long compteur, boolean mllp) {
+    byte[]bufferACK;
+    
+    static long compteur; //compteur de classe
+    boolean lACK,lMLLP;
+    int bufferMAX;
+    
+    public hl7Writer(Socket sock,String path, String ext, boolean ACK, boolean MLLP,int bfMAX) {
     try {
-        comptr++;
+        compteur++;
         localsock=sock;
-        pw=new BufferedWriter(new FileWriter(comptr+".hl7"));
-        System.out.println(comptr+"-Creation du fichier "+path+"/"+comptr+".hl7");
+        lACK=ACK;
+        lMLLP=MLLP;
+        bufferMAX=bfMAX;
+        pw=new BufferedWriter(new FileWriter(path+"/"+compteur+"."+ext));
+        System.out.println(compteur+" - create file "+path+"/"+compteur+"."+ext);
+        //preparer les flux in/out
         bis=new BufferedInputStream(localsock.getInputStream());
-        buffer=new byte[5428880];
-        
+        bos=new BufferedOutputStream(localsock.getOutputStream());
+        //init taille du buffer max
+        buffer=new byte[bufferMAX];
+        bufferACK=new byte[10240]; //max 10ko
         
     } catch (Exception ex) {
         Logger.getLogger(hl7Writer.class.getName()).log(Level.SEVERE, null, ex);
     }
     }
     
+    
+    public void prepare_ACK(){
+    //TODO remplir le bufferACK...    
+    }
 
+    public void convert_mllp(){
+    //TODO retirer les element mllp du buffer    
+    }
+    
+    
     @Override
     public void run() {
         try{
         long nboctet=bis.read(buffer);
-            System.out.println(comptr+"-Lecture de "+nboctet+" octets...");
+        if (lMLLP){convert_mllp();}
+        System.out.println(compteur+" - read "+nboctet+" bytes");
         for (int i=0;i<nboctet;i++){pw.write(buffer[i]);}
         pw.flush();
         pw.close();
-            System.out.println(comptr+"-Cloture...");
+        if (lACK){
+            prepare_ACK();
+            bos.write(bufferACK);
+            System.out.println(compteur+" - send ACK");
+        }
+        System.out.println(compteur+" - close");
         }
         catch(Exception e){}
     }
