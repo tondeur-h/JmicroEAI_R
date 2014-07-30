@@ -11,7 +11,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Properties;
 import java.util.logging.Level;
-import java.util.logging.Logger;;
+import java.util.logging.Logger;
 
 /**
  *
@@ -24,6 +24,7 @@ public class JmicroEAI_R {
     
     String pathDest=".";
     String ext="hl7";
+    String suff="";
     String host="127.0.0.1";
     int port=4200;
     boolean MLLP=false;
@@ -37,6 +38,7 @@ public class JmicroEAI_R {
         p.load(new FileReader(fich_prop));
         pathDest=p.getProperty("path", ".");
         ext=p.getProperty("ext", "hl7");
+        suff=p.getProperty("suff", "");
         host=p.getProperty("host", "127.0.0.1");
         port=Integer.parseInt(p.getProperty("port", "4200"), 10);
         MLLP=Boolean.parseBoolean(p.getProperty("mllp", "false"));
@@ -77,6 +79,7 @@ public class JmicroEAI_R {
             System.out.println("Connection Socket on "+host+":"+port);
             System.out.println("path: "+pathDest);
             System.out.println("extension: "+ext);
+            System.out.println("suffixe: "+suff);
             System.out.println("MLLP: "+MLLP);
             System.out.println("ACK: "+ACK);
             System.out.println("buffer size: "+bufferMAX);
@@ -95,7 +98,7 @@ public class JmicroEAI_R {
         while (true){
             
                 sock=ss.accept();
-                hl7Writer hl7=new hl7Writer(sock,pathDest,ext,ACK,MLLP,bufferMAX);
+                hl7Writer hl7=new hl7Writer(sock,pathDest,ext,suff,ACK,MLLP,bufferMAX);
                 hl7.start();
                 
         }
@@ -123,7 +126,7 @@ class hl7Writer extends Thread{
     
     long bufferSize=0;
     
-    public hl7Writer(Socket sock,String path, String ext, boolean ACK, boolean MLLP,int bfMAX) {
+    public hl7Writer(Socket sock,String path, String ext, String suff, boolean ACK, boolean MLLP,int bfMAX) {
     try {
         compteur++;
         localsock=sock;
@@ -131,8 +134,8 @@ class hl7Writer extends Thread{
         lMLLP=MLLP;
         bufferMAX=bfMAX;
         
-        pw=new BufferedWriter(new FileWriter(path+"/"+compteur+"."+ext));
-        System.out.println(compteur+" - create file "+path+"/"+compteur+"."+ext);
+        pw=new BufferedWriter(new FileWriter(path+"/"+suff+compteur+"."+ext));
+        System.out.println(compteur+" - create file "+path+"/"+suff+compteur+"."+ext);
         //preparer les flux in/out
         bis=new BufferedInputStream(localsock.getInputStream());
         bos=new BufferedOutputStream(localsock.getOutputStream());
@@ -151,7 +154,6 @@ class hl7Writer extends Thread{
     }
 
     public void convert_mllp(){
-    //TODO retirer les element mllp du buffer  
         //eliminer les derniers caracteres
         bufferSize=bufferSize-2;
         //decaler vers i-1
