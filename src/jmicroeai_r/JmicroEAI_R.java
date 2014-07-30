@@ -121,6 +121,8 @@ class hl7Writer extends Thread{
     boolean lACK,lMLLP;
     int bufferMAX;
     
+    long bufferSize=0;
+    
     public hl7Writer(Socket sock,String path, String ext, boolean ACK, boolean MLLP,int bfMAX) {
     try {
         compteur++;
@@ -128,6 +130,7 @@ class hl7Writer extends Thread{
         lACK=ACK;
         lMLLP=MLLP;
         bufferMAX=bfMAX;
+        
         pw=new BufferedWriter(new FileWriter(path+"/"+compteur+"."+ext));
         System.out.println(compteur+" - create file "+path+"/"+compteur+"."+ext);
         //preparer les flux in/out
@@ -148,17 +151,29 @@ class hl7Writer extends Thread{
     }
 
     public void convert_mllp(){
-    //TODO retirer les element mllp du buffer    
+    //TODO retirer les element mllp du buffer  
+        //eliminer les derniers caracteres
+        bufferSize=bufferSize-2;
+        //decaler vers i-1
+        for (int ind=1;ind<bufferSize-2;ind++){
+          buffer[ind-1]=buffer[ind];
+        }
+        //retirer le premier caractére...
+        bufferSize=bufferSize-2;
     }
     
     
     @Override
     public void run() {
         try{
-        long nboctet=bis.read(buffer);
-        if (lMLLP){convert_mllp();}
-        System.out.println(compteur+" - read "+nboctet+" bytes");
-        for (int i=0;i<nboctet;i++){pw.write(buffer[i]);}
+        bufferSize=bis.read(buffer);
+        //retirer les caracteres encapsulation MLLP
+        if (lMLLP){convert_mllp();
+            System.out.println(compteur+" - extract MLLP "+bufferSize+" bytes");}
+        
+        System.out.println(compteur+" - read "+bufferSize+" bytes");
+        
+        for (int i=0;i<bufferSize;i++){pw.write(buffer[i]);}
         pw.flush();
         pw.close();
         if (lACK){
