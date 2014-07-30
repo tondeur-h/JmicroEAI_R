@@ -10,6 +10,7 @@ import java.net.Inet4Address;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Properties;
+import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -125,6 +126,9 @@ class hl7Writer extends Thread{
     int bufferMAX;
     
     long bufferSize=0;
+    String MSA;
+    
+    String [] ArraySegment;
     
     public hl7Writer(Socket sock,String path, String ext, String suff, boolean ACK, boolean MLLP,int bfMAX) {
     try {
@@ -143,6 +147,8 @@ class hl7Writer extends Thread{
         buffer=new byte[bufferMAX];
         bufferACK=new byte[10240]; //max 10ko
         
+        ArraySegment=new String [30];
+        
     } catch (Exception ex) {
         Logger.getLogger(hl7Writer.class.getName()).log(Level.SEVERE, null, ex);
     }
@@ -150,7 +156,27 @@ class hl7Writer extends Thread{
     
     
     public void prepare_ACK(){
-    //TODO remplir le bufferACK...    
+        //chercher la ligne MSH
+    int i=0;
+    while ((i<bufferSize) && (buffer[i]!=0x0d)){i++;}
+    //convertir buffer en string
+    String MSH=new String (buffer, 0, i);
+    //    System.out.println(MSH);
+        
+       //decouper les segments
+     
+        Scanner sc =new Scanner(MSH);
+        sc.useDelimiter("\\|");
+           
+        int iseg=0;
+        while (sc.hasNext()){
+            ArraySegment[iseg]=sc.next();
+            iseg++;
+        }
+        
+        MSA=MSH+"\nMSA|AA|"+ArraySegment[9];
+        bufferACK=MSA.getBytes();
+        System.out.println(MSA);
     }
 
     public void convert_mllp(){
@@ -169,11 +195,13 @@ class hl7Writer extends Thread{
     public void run() {
         try{
         bufferSize=bis.read(buffer);
+         System.out.println(compteur+" - read "+bufferSize+" bytes");
+         
         //retirer les caracteres encapsulation MLLP
         if (lMLLP){convert_mllp();
-            System.out.println(compteur+" - extract MLLP "+bufferSize+" bytes");}
-        
-        System.out.println(compteur+" - read "+bufferSize+" bytes");
+            System.out.println(compteur+" - extract MLLP "+bufferSize+" bytes");
+        }
+   
         
         for (int i=0;i<bufferSize;i++){pw.write(buffer[i]);}
         pw.flush();
