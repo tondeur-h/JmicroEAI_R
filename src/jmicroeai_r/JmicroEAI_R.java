@@ -6,6 +6,7 @@ import java.io.BufferedWriter;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.Inet4Address;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -28,6 +29,8 @@ public class JmicroEAI_R {
     String pathDest="."; //path de destination des fichiers
     String ext="hl7"; //extension des fichiers
     String pref=""; //prefixe des nom de fichiers
+    boolean OK=false;
+    String extok="ok";
     int sl=0x0d;
     String host="127.0.0.1"; //host du pc nom ou ip
     int port=4200; //port d'ecoute de la socket
@@ -52,6 +55,8 @@ public class JmicroEAI_R {
         port=Integer.parseInt(p.getProperty("port", "4200"), 10);
         MLLP=Boolean.parseBoolean(p.getProperty("mllp", "false"));
         ACK=Boolean.parseBoolean(p.getProperty("ack", "false"));
+        OK=Boolean.parseBoolean(p.getProperty("ok", "false"));
+        extok=p.getProperty("extok", "ok");
         bufferMAX=Integer.parseInt(p.getProperty("buffer", "5242880"), 10);
     }catch(Exception e){e.printStackTrace();/*muet utiliser les valeurs par défaut*/}
     }
@@ -100,6 +105,8 @@ public class JmicroEAI_R {
             System.out.println("cr/lf: "+sl);
             System.out.println("MLLP: "+MLLP);
             System.out.println("ACK: "+ACK);
+            System.out.println("OK: "+OK);
+            System.out.println("extok: "+extok);
             System.out.println("buffer size: "+bufferMAX);
             System.out.println("Ready...");
         } catch (Exception ex) {
@@ -119,7 +126,7 @@ public class JmicroEAI_R {
                 //attente clients
                 sock=ss.accept();
                 //run thread pour chaque client
-                hl7Writer hl7=new hl7Writer(sock,pathDest,ext,pref,sl,ACK,MLLP,bufferMAX);
+                hl7Writer hl7=new hl7Writer(sock,pathDest,ext,pref,sl,extok,ACK,MLLP,OK,bufferMAX);
                 hl7.start();
                 
         }
@@ -144,6 +151,7 @@ class hl7Writer extends Thread{
     
     //ouverture des streams vers fichiers et socket
     BufferedWriter pw;
+    PrintWriter pwOK;
     BufferedInputStream bis;
     BufferedOutputStream bos;
     
@@ -155,23 +163,28 @@ class hl7Writer extends Thread{
     long cname;
     
     //variable locale à la classe
-    boolean lACK,lMLLP;
+    boolean lACK,lMLLP,lOK;
     int bufferMAX;
     long bufferSize=0;
     String MSA;
     String sep="|";
+    String lextok,lpath,lsuff;
     int sautligne;
     
     //tableau des segment MSH
     String [] ArrayMSH;
     
-    public hl7Writer(Socket sock,String path, String ext, String suff,int sl, boolean ACK, boolean MLLP,int bfMAX) {
+    public hl7Writer(Socket sock,String path, String ext, String suff,int sl, String extok,boolean ACK, boolean MLLP,boolean OK,int bfMAX) {
     try {
         compteur++;
         cname=compteur;
         localsock=sock;
         lACK=ACK;
         lMLLP=MLLP;
+        lextok=extok;
+        lpath=path;
+        lsuff=suff;
+        
         bufferMAX=bfMAX;
         sautligne=sl;
         
@@ -181,6 +194,7 @@ class hl7Writer extends Thread{
         
         pw=new BufferedWriter(new FileWriter(path+"/"+suff+cname+"."+ext));
         System.out.println(cname+" - create file "+path+"/"+suff+cname+"."+ext);
+        
         //preparer les flux in/out
         bis=new BufferedInputStream(localsock.getInputStream());
         bos=new BufferedOutputStream(localsock.getOutputStream());
@@ -256,6 +270,13 @@ class hl7Writer extends Thread{
         for (int i=0;i<bufferSize;i++){pw.write(buffer[i]);}
         pw.flush();
         pw.close();
+        
+        if (lOK){
+            pwOK=new PrintWriter(lpath+"/"+lsuff+cname+"."+lextok);
+            pwOK.print(cname+" OK");
+            pwOK.close();
+            System.out.println(cname+" - generate ok file");
+        }
         
         //si demande d'ack préparer ACK et envoyer vers client
         if (lACK){
